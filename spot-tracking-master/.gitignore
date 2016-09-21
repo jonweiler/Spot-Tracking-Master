@@ -1,0 +1,7 @@
+dist
+cabal.sandbox.config
+.cabal-sandbox
+.*.swp
+.module-cache
+
+cabal.config

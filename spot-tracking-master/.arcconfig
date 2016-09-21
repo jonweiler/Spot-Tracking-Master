@@ -1,0 +1,6 @@
+{
+  "phabricator.uri": "http://phabricator.spot.dev/",
+  "project.name": "spot-tracking",
+  "unit.engine": "HspecUnitTestEngine",
+  "load": ["arc_libs/hspec"]
+}

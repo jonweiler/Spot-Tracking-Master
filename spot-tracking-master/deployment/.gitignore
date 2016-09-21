@@ -1,0 +1,7 @@
+*.box
+*.vdi
+*.bz2
+*.ova
+*.ovf
+variables.json
+output-*/

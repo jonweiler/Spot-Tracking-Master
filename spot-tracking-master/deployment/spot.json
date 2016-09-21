@@ -1,0 +1,164 @@
+{
+  "variables": {
+    "gitkey": "",
+    "gitkeypub": "",
+    "awsaccess": "",
+    "awssecret": "",
+    "ovfpath": ""
+  },
+  "builders": [{
+    "type": "virtualbox-ovf",
+    "source_path": "{{user `ovfpath`}}",
+    "ssh_username": "packer",
+    "ssh_password": "packer",
+    "headless": true,
+    "ssh_wait_timeout": "30s",
+    "shutdown_command": "echo 'packer' | sudo -S shutdown -P now"
+  }, {
+    "type": "docker",
+    "image": "centos",
+    "export_path": "spot.tar"
+  }, {
+    "type": "amazon-ebs",
+    "access_key": "{{user `awsaccess`}}",
+    "secret_key": "{{user `awssecret`}}",
+    "source_ami": "ami-c7d092f7",
+    "ami_name": "Packer Worker {{timestamp}}",
+    "region": "us-east-1",
+    "instance_type": "t2.micro",
+    "ssh_username": "centos"
+  }, {
+    "type": "virtualbox-iso",
+    "iso_url": "http://isoredirect.centos.org/centos/7/isos/x86_64/CentOS-7.0-1406-x86_64-DVD.iso",
+    "iso_checksum": "713ea7847adcdd1700e92429f212721a",
+    "iso_checksum_type": "md5",
+    "ssh_username": "centos",
+    "ssh_password": "packer",
+    "ssh_wait_timeout": "30s",
+    "boot_command": [
+      "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter><wait>"
+    ],
+    "guest_os_type": "RedHat_64",
+    "headless": "true",
+    "http_directory": "sources",
+    "vboxmanage": [
+      [ "modifyvm", "{{.Name}}", "--memory", "2048" ],
+      [ "modifyvm", "{{.Name}}", "--cpus", "2" ]
+    ],
+    "shutdown_command": "echo 'packer' | sudo -S shutdown -P now"
+  }],
+  "provisioners": [{
+    "type": "chef-solo",
+    "install_command": "curl -L https://www.opscode.com/chef/install.sh | {{if .Sudo}}sudo{{end}} bash /dev/stdin",
+    "cookbook_paths": ["cookbooks"],
+    "run_list": [
+      "recipe[nginx::repo]",
+      "recipe[nginx]",
+      "recipe[postgresql::server]",
+      "recipe[postgresql::client]",
+      "recipe[postgresql::contrib]",
+      "recipe[postgresql::config_pgtune]",
+      "recipe[postgresql::config_initdb]"
+    ],
+    "json": {
+      "postgresql": {
+        "enable_pgdg_yum": true,
+        "version": "9.4",
+        "config_pgtune": {
+          "db_type": "desktop"
+        },
+        "password": {
+          "postgres": "badrandomstringchangequickly"
+        },
+        "contrib": {
+          "extensions": [
+            "pageinspect",
+            "pg_buffercache",
+            "pg_freespacemap",
+            "pgrowlocks",
+            "pgstattuple"
+          ]
+        },
+        "config": {
+          "listen_addresses": "localhost",
+          "timezone": "UTC",
+          "log_timezone": "UTC"
+        }
+      },
+      "nginx": {
+        "sendfile": "off",
+        "user": "nginx",
+        "group": "nginx",
+        "server_tokens": "off",
+        "repo_source": "nginx",
+        "worker_processes": 2,
+        "gzip": "on"
+      }
+    }
+  }, {
+    "type": "file",
+    "source": "sources/app-nginx",
+    "destination": "/tmp/app"
+  }, {
+    "type": "file",
+    "source": "sources/mynginx.pp",
+    "destination": "/tmp/nginxse.pp"
+  }, {
+    "type": "file",
+    "source": "{{user `gitkey`}}",
+    "destination": "/tmp/id_rsa"
+  }, {
+    "type": "file",
+    "source": "{{user `gitkeypub`}}",
+    "destination": "/tmp/id_rsa.pub"
+  }, {
+    "type": "shell",
+    "inline": [
+      "set -ex",
+      "mkdir ~/.ssh",
+      "chmod 700 ~/.ssh",
+      "cp /tmp/id_rsa ~/.ssh",
+      "cp /tmp/id_rsa.pub ~/.ssh",
+      "chmod 600 ~/.ssh/id_rsa",
+      "ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts"
+    ]
+  }, {
+    "type": "shell",
+    "inline": [
+      "sudo semodule -i /tmp/nginxse.pp"
+    ]
+  }, {
+    "type": "shell",
+    "inline": [
+      "set -ex",
+      "curl -sL https://github.com/mietek/halcyon/raw/master/setup.sh | bash /dev/stdin",
+      "sudo chown -R $USER: /opt",
+      "cd /opt",
+      "git clone git@github.com:rickeyski/spot-tracking.git",
+      "cp -r spot-tracking/app app",
+      "sudo chown -R nginx: app",
+      "[[ -x /usr/bin/pg_config ]] || sudo ln -s /usr/pgsql-9.4/bin/pg_config /usr/bin/pg_config",
+      "export HALCYON_AWS_ACCESS_KEY_ID={{user `awsaccess`}}",
+      "export HALCYON_AWS_SECRET_ACCESS_KEY={{user `awssecret`}}",
+      "export HALCYON_S3_BUCKET=rv-halcyon-spottracking",
+      "export HALCYON_S3_ENDPOINT=s3-us-west-2.amazonaws.com",
+      "cd /opt/spot-tracking && /app/halcyon/halcyon install"
+    ]
+  }, {
+    "type": "shell",
+    "inline": [
+      "sudo mkdir -p /etc/nginx/sites-enabled",
+      "sudo cp /tmp/app /etc/nginx/sites-enabled"
+    ]
+  }],
+  "post-processors": [{
+    "type": "vagrant",
+    "keep_input_artifact": true,
+    "except": ["docker"]
+  }, {
+    "type": "compress",
+    "format": "tar.bz2",
+    "output": "spot.tar.bz2",
+    "only": ["docker"]
+  }]
+}

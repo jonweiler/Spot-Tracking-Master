@@ -1,0 +1,1 @@
+#*/5 * * * * /app/bin/spot-client 2 &>> $HOME/client.log

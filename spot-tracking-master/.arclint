@@ -1,0 +1,21 @@
+{
+  "linters": {
+    "hlint": {
+      "type": "hlint",
+      "include": "(\\.hs$)",
+      "exclude": "(^.cabal-sandbox/|^dist)"
+    },
+    "json": {
+      "type": "json",
+      "include": ["(\\.json$)", "(\\.arc.*)"]
+    },
+    "jshint": {
+      "type": "jshint",
+      "include": "(^app/.*\\.js$)",
+      "exclude": ["(^app/static/js/lib/)",
+                  "(^app/static/jsx/)",
+                  "(^app/static/build.js)",
+                  "(^app/static/prod/)"]
+    }
+  }
+}
